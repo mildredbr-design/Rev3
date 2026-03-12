@@ -246,16 +246,27 @@ tipo_calculo = st.selectbox("Tipo cálculo",["Vitesse","Cuota"])
 valor = st.number_input("Valor cálculo",0.0,1000.0,3.0)
 
 # ---------------------------------------------------------
-# AMORTIZACIONES MULTIPLES
+# AMORTIZACIONES MULTIPLES CON CALENDARIO
 # ---------------------------------------------------------
 
 st.subheader("Amortizaciones anticipadas")
 
 df_amort = st.data_editor(
     pd.DataFrame({
-        "Fecha": [],
-        "Importe (€)": []
+        "Fecha": [None],
+        "Importe (€)": [0.0]
     }),
+    column_config={
+        "Fecha": st.column_config.DateColumn(
+            "Fecha amortización",
+            format="DD/MM/YYYY"
+        ),
+        "Importe (€)": st.column_config.NumberColumn(
+            "Importe (€)",
+            min_value=0,
+            step=100
+        )
+    },
     num_rows="dynamic",
     use_container_width=True
 )
