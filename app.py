@@ -32,7 +32,7 @@ def siguiente_mes(fecha):
 
 
 # ---------------------------------------------------------
-# CALCULO INTERES NORMAL
+# INTERES NORMAL
 # ---------------------------------------------------------
 
 def interes_periodo(capital, tin, fecha_inicio, fecha_fin):
@@ -49,7 +49,7 @@ def interes_periodo(capital, tin, fecha_inicio, fecha_fin):
 
 
 # ---------------------------------------------------------
-# CALCULO INTERES CON MULTIPLES AMORTIZACIONES
+# INTERES CON AMORTIZACIONES
 # ---------------------------------------------------------
 
 def interes_con_amortizaciones(capital, tin, fecha_inicio, fecha_fin, amortizaciones):
@@ -70,6 +70,9 @@ def interes_con_amortizaciones(capital, tin, fecha_inicio, fecha_fin, amortizaci
         interes_total += interes
 
         capital -= Decimal(str(importe))
+
+        if capital < 0:
+            capital = Decimal("0")
 
         fecha_actual = fecha_amort
 
@@ -106,7 +109,7 @@ def simulador(capital, tin, tipo_calculo, valor, fecha_inicio,
     if tipo_calculo == "Vitesse":
         cuota = (capital * Decimal(str(valor)) / Decimal("100")).quantize(Decimal("0.01"),ROUND_HALF_UP)
 
-    elif tipo_calculo == "Cuota":
+    else:
         cuota = Decimal(str(valor)).quantize(Decimal("0.01"),ROUND_HALF_UP)
 
     while saldo > 0:
@@ -201,8 +204,8 @@ def calcular_tae(cuotas, fechas):
 
     for i in range(1,len(fechas)):
 
-        f0=pd.to_datetime(fechas[i-1]).date()
-        f1=pd.to_datetime(fechas[i]).date()
+        f0=fechas[i-1]
+        f1=fechas[i]
 
         fraccion=(f1-f0).days/dias_ano(f0)
         tiempos.append(tiempos[-1]+fraccion)
@@ -246,7 +249,7 @@ tipo_calculo = st.selectbox("Tipo cálculo",["Vitesse","Cuota"])
 valor = st.number_input("Valor cálculo",0.0,1000.0,3.0)
 
 # ---------------------------------------------------------
-# AMORTIZACIONES MULTIPLES CON CALENDARIO
+# AMORTIZACIONES
 # ---------------------------------------------------------
 
 st.subheader("Amortizaciones anticipadas")
@@ -257,15 +260,8 @@ df_amort = st.data_editor(
         "Importe (€)": [0.0]
     }),
     column_config={
-        "Fecha": st.column_config.DateColumn(
-            "Fecha amortización",
-            format="DD/MM/YYYY"
-        ),
-        "Importe (€)": st.column_config.NumberColumn(
-            "Importe (€)",
-            min_value=0,
-            step=100
-        )
+        "Fecha": st.column_config.DateColumn("Fecha amortización",format="DD/MM/YYYY"),
+        "Importe (€)": st.column_config.NumberColumn("Importe (€)",min_value=0,step=100)
     },
     num_rows="dynamic",
     use_container_width=True
@@ -305,14 +301,37 @@ if st.button("Calcular"):
 
     st.dataframe(tabla,use_container_width=True)
 
+    # -------- FLUJOS TAE --------
+
+    flujos=[]
+    fechas_flujos=[]
+
+    flujos.append(-capital)
+    fechas_flujos.append(fecha_inicio)
+
+    for i,row in tabla.iterrows():
+        flujos.append(row["Recibo total (€)"])
+        fechas_flujos.append(row["Fecha recibo"])
+
+    for _,row in df_amort.iterrows():
+
+        if pd.isna(row["Fecha"]):
+            continue
+
+        flujos.append(row["Importe (€)"])
+        fechas_flujos.append(pd.to_datetime(row["Fecha"]).date())
+
+    datos_tae=list(zip(fechas_flujos,flujos))
+    datos_tae.sort()
+
+    fechas_flujos=[x[0] for x in datos_tae]
+    flujos=[x[1] for x in datos_tae]
+
+    tae=calcular_tae(flujos,fechas_flujos)
+
     total_intereses=round(tabla["Intereses (€)"].sum(),2)
     total_seguro=round(tabla["Seguro (€)"].sum(),2)
     total_pago=round(tabla["Recibo total (€)"].sum(),2)
-
-    cuotas=[-capital]+list(tabla["Recibo total (€)"])
-    fechas=[fecha_inicio]+list(tabla["Fecha recibo"])
-
-    tae=calcular_tae(cuotas,fechas)
 
     resumen=pd.DataFrame({
 
