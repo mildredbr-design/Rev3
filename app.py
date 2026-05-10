@@ -154,25 +154,19 @@ def interes_con_amortizaciones(capital, tin, fecha_inicio, fecha_fin,
 # SIMULADOR
 # ---------------------------------------------------------
 
-def simulador(capital, tin, tipo_calculo, valor, fecha_inicio,
+def simulador(capital, tin, cuota_mensual, fecha_inicio,
               dia_recibo, df_amort, seguro_tasa, tipo_producto):
 
     capital = Decimal(str(capital))
     saldo = capital
     seguro_tasa = Decimal(str(seguro_tasa))
+    cuota = Decimal(str(cuota_mensual)).quantize(Decimal("0.01"), ROUND_HALF_UP)
 
     fecha_recibo = crear_fecha_recibo(fecha_inicio, dia_recibo)
     if fecha_recibo <= fecha_inicio:
         fecha_recibo = crear_fecha_recibo(siguiente_mes_fecha(fecha_inicio), dia_recibo)
 
     fecha_anterior = fecha_inicio
-
-    if tipo_calculo == "Vitesse":
-        cuota = (capital * Decimal(str(valor)) / Decimal("100")).quantize(
-            Decimal("0.01"), ROUND_HALF_UP
-        )
-    else:
-        cuota = Decimal(str(valor)).quantize(Decimal("0.01"), ROUND_HALF_UP)
 
     datos = []
     mes = 1
@@ -343,8 +337,16 @@ with col1:
     dia_recibo = st.selectbox("Dia del recibo", list(range(1, 29)))
 
 with col2:
-    tipo_calculo = st.selectbox("Tipo calculo", ["Vitesse", "Cuota"])
-    valor = st.number_input("Valor calculo", 0.0, 1000.0, 3.0)
+    cuota_input = st.number_input("Cuota mensual (EUR)", 0.0, 100_000.0, 180.0, step=1.0)
+
+    # --- DESACTIVADO (conservar para uso futuro) ---
+    # tipo_calculo = st.selectbox("Tipo calculo", ["Vitesse", "Cuota"])
+    # valor = st.number_input("Valor calculo", 0.0, 1000.0, 3.0)
+    # if tipo_calculo == "Vitesse":
+    #     cuota_input = round(capital * valor / 100, 2)
+    # else:
+    #     cuota_input = valor
+    # ------------------------------------------------
 
     opciones_seguro = {
         "No": 0,
@@ -419,7 +421,7 @@ if fechas_bloqueo_global:
 if st.button("Calcular", type="primary"):
 
     tabla = simulador(
-        capital, tin, tipo_calculo, valor,
+        capital, tin, cuota_input,
         fecha_inicio, dia_recibo, df_amort, seguro_tasa,
         tipo_producto
     )
