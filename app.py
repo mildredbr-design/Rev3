@@ -154,25 +154,19 @@ def interes_con_amortizaciones(capital, tin, fecha_inicio, fecha_fin,
 # SIMULADOR
 # ---------------------------------------------------------
 
-def simulador(capital, tin, tipo_calculo, valor, fecha_inicio,
+def simulador(capital, tin, cuota_mensual, fecha_inicio,
               dia_recibo, df_amort, seguro_tasa, tipo_producto):
 
     capital = Decimal(str(capital))
     saldo = capital
     seguro_tasa = Decimal(str(seguro_tasa))
+    cuota = Decimal(str(cuota_mensual)).quantize(Decimal("0.01"), ROUND_HALF_UP)
 
     fecha_recibo = crear_fecha_recibo(fecha_inicio, dia_recibo)
     if fecha_recibo <= fecha_inicio:
         fecha_recibo = crear_fecha_recibo(siguiente_mes_fecha(fecha_inicio), dia_recibo)
 
     fecha_anterior = fecha_inicio
-
-    if tipo_calculo == "Vitesse":
-        cuota = (capital * Decimal(str(valor)) / Decimal("100")).quantize(
-            Decimal("0.01"), ROUND_HALF_UP
-        )
-    else:
-        cuota = Decimal(str(valor)).quantize(Decimal("0.01"), ROUND_HALF_UP)
 
     datos = []
     mes = 1
@@ -204,38 +198,61 @@ def simulador(capital, tin, tipo_calculo, valor, fecha_inicio,
         hay_amort_mes = len(amorts_p1) > 0 or len(amorts_p2) > 0
 
         # --- Calculo de interes ---
+        # El interes del mes = Tramo1 + Tramo2, siempre entre
+        # fecha_recibo_anterior y fecha_recibo_siguiente.
+        # P1 y P2 afectan el calculo del mes de la misma forma:
+        # interes = [recibo_ant → fecha_amort] con capital original
+        #         + [fecha_amort → recibo_sig] con capital reducido
+        # La diferencia P1/P2 solo determina cuando se refleja
+        # la reduccion de capital:
+        #   P1 → este mes
+        #   P2 → el recibo proximo no cambia; regularizacion al mes siguiente
 
-        if amorts_p1:
-            interes, saldo_p1 = interes_con_amortizaciones(
+        # Todas las amortizaciones del mes para calcular interes en tramos
+        todas_amorts = amorts_p1 + amorts_p2
+
+        if todas_amorts:
+            interes, saldo_tras_amort = interes_con_amortizaciones(
                 saldo, tin, fecha_anterior, fecha_recibo,
-                amorts_p1, tipo_producto
+                todas_amorts, tipo_producto
             )
             amort_extra_p1 = sum(a[1] for a in amorts_p1)
-            saldo = saldo_p1
+            amort_extra_p2 = sum(a[1] for a in amorts_p2)
+            # Saldo se reduce por P1 este mes
+            saldo_tras_p1 = saldo - sum(a[1] for a in amorts_p1)
+            if saldo_tras_p1 < 0:
+                saldo_tras_p1 = Decimal("0")
+            saldo = saldo_tras_p1
         else:
             interes = interes_periodo(
                 saldo, tin, fecha_anterior, fecha_recibo,
-                tipo_producto, hay_amort_anticipada=hay_amort_mes
+                tipo_producto, hay_amort_anticipada=False
             )
             amort_extra_p1 = Decimal("0")
+            amort_extra_p2 = Decimal("0")
 
+        # Regularizacion diferida del mes anterior (de P2 previo)
         interes += regularizacion_pendiente
         regularizacion_pendiente = Decimal("0")
 
-        # --- Periodo 2: recibo proximo intacto ---
-
-        amort_extra_p2 = Decimal("0")
+        # --- Periodo 2: el recibo proximo no cambia ---
+        # El interes ya esta calculado con los tramos correctos.
+        # Solo calculamos el ahorro de interes que se regulariza
+        # en el mes siguiente (desde fecha_amort hasta recibo+2).
         if amorts_p2:
             fecha_sig_recibo = crear_fecha_recibo(
                 siguiente_mes_fecha(fecha_recibo), dia_recibo
             )
             for fa, imp in amorts_p2:
+                # Ahorro = interes sobre el importe desde fecha_amort
+                # hasta el siguiente recibo (ya descontado en el calculo
+                # de tramos, pero hay que devolverlo como regularizacion)
                 ahorro = calcular_interes_tramo(
                     imp, tin, fa, fecha_sig_recibo,
                     tipo_producto, hay_amort_anticipada=True
                 )
                 regularizacion_pendiente -= ahorro
-                amort_extra_p2 += imp
+                # Saldo se reduce por P2 tambien, pero el recibo no cambia
                 saldo -= imp
                 if saldo < 0:
                     saldo = Decimal("0")
@@ -343,8 +360,16 @@ with col1:
     dia_recibo = st.selectbox("Dia del recibo", list(range(1, 29)))
 
 with col2:
-    tipo_calculo = st.selectbox("Tipo calculo", ["Vitesse", "Cuota"])
-    valor = st.number_input("Valor calculo", 0.0, 1000.0, 3.0)
+    cuota_input = st.number_input("Cuota mensual (EUR)", 0.0, 100_000.0, 180.0, step=1.0)
+
+    # --- DESACTIVADO (conservar para uso futuro) ---
+    # tipo_calculo = st.selectbox("Tipo calculo", ["Vitesse", "Cuota"])
+    # valor = st.number_input("Valor calculo", 0.0, 1000.0, 3.0)
+    # if tipo_calculo == "Vitesse":
+    #     cuota_input = round(capital * valor / 100, 2)
+    # else:
+    #     cuota_input = valor
+    # ------------------------------------------------
 
     opciones_seguro = {
         "No": 0,
@@ -419,7 +444,7 @@ if fechas_bloqueo_global:
 if st.button("Calcular", type="primary"):
 
     tabla = simulador(
-        capital, tin, tipo_calculo, valor,
+        capital, tin, cuota_input,
         fecha_inicio, dia_recibo, df_amort, seguro_tasa,
         tipo_producto
     )
