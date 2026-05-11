@@ -157,7 +157,8 @@ def interes_con_movimientos(capital, tin, fecha_inicio, fecha_fin,
 # ---------------------------------------------------------
 
 def simulador(capital, tin, cuota_mensual, fecha_inicio,
-              dia_recibo, df_amort, df_dispos, seguro_tasa, tipo_producto):
+              dia_recibo, df_amort, df_dispos, seguro_tasa, tipo_producto,
+              cambios_dia=None):
 
     capital = Decimal(str(capital))
     saldo = capital
@@ -168,12 +169,24 @@ def simulador(capital, tin, cuota_mensual, fecha_inicio,
     if fecha_recibo <= fecha_inicio:
         fecha_recibo = crear_fecha_recibo(siguiente_mes_fecha(fecha_inicio), dia_recibo)
 
+    if cambios_dia is None:
+        cambios_dia = {}
+
     fecha_anterior = fecha_inicio
     datos = []
     mes = 1
+    dia_pago_actual = dia_recibo  # dia de pago vigente
     regularizacion_pendiente = Decimal("0")
 
     while saldo > 0:
+
+        # Comprobar si hay cambio de dia de pago este mes
+        clave = (fecha_recibo.year, fecha_recibo.month)
+        if clave in cambios_dia:
+            nuevo_dia = cambios_dia[clave]
+            # El recibo de este mes cae en el nuevo dia
+            fecha_recibo = crear_fecha_recibo(fecha_recibo, nuevo_dia)
+            dia_pago_actual = nuevo_dia
 
         fb = fecha_bloqueo_para_mes(fecha_recibo)
         corte = fb - timedelta(days=2)
@@ -303,7 +316,7 @@ def simulador(capital, tin, cuota_mensual, fecha_inicio,
         })
 
         fecha_anterior = fecha_recibo
-        fecha_recibo = crear_fecha_recibo(siguiente_mes_fecha(fecha_recibo), dia_recibo)
+        fecha_recibo = crear_fecha_recibo(siguiente_mes_fecha(fecha_recibo), dia_pago_actual)
         mes += 1
 
         if mes > 600:
@@ -437,6 +450,44 @@ df_dispos_raw = st.data_editor(
     key="editor_dispos",
 )
 
+# ---------------------------------------------------------
+# CAMBIO DE DIA DE PAGO
+# ---------------------------------------------------------
+
+st.subheader("Cambio de dia de pago")
+st.caption(
+    "Introduce el mes en que cambia el dia de pago y el nuevo dia. "
+    "Solo afecta al numero de dias del calculo de intereses de ese mes. "
+    "La cuota no cambia."
+)
+
+df_cambio_dia_raw = st.data_editor(
+    pd.DataFrame({"Mes (YYYY-MM)": [None], "Nuevo dia": [None]}),
+    column_config={
+        "Mes (YYYY-MM)": st.column_config.TextColumn(
+            "Mes del cambio (YYYY-MM)", help="Ejemplo: 2026-07"
+        ),
+        "Nuevo dia": st.column_config.NumberColumn(
+            "Nuevo dia de pago", min_value=1, max_value=28, step=1
+        ),
+    },
+    num_rows="dynamic",
+    use_container_width=True,
+    key="editor_cambio_dia",
+)
+
+# Convertir a diccionario {(year, month): nuevo_dia}
+cambios_dia = {}
+for _, row in df_cambio_dia_raw.iterrows():
+    if pd.isna(row["Mes (YYYY-MM)"]) or pd.isna(row["Nuevo dia"]):
+        continue
+    try:
+        partes = str(row["Mes (YYYY-MM)"]).strip().split("-")
+        anio, mes_num = int(partes[0]), int(partes[1])
+        cambios_dia[(anio, mes_num)] = int(row["Nuevo dia"])
+    except Exception:
+        pass
+
 # Fecha referencia TAE = primera amortizacion con importe > 0
 fecha_ref_tae = None
 for _, row in df_amort_raw.iterrows():
@@ -463,7 +514,8 @@ if st.button("Calcular", type="primary"):
         capital, tin, cuota_input,
         fecha_inicio, dia_recibo,
         df_amort_raw, df_dispos_raw,
-        seguro_tasa, tipo_producto
+        seguro_tasa, tipo_producto,
+        cambios_dia
     )
 
     st.subheader("Tabla de amortizacion")
