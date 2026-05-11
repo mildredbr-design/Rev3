@@ -215,6 +215,10 @@ def simulador(capital, tin, cuota_mensual, fecha_inicio,
 
         hay_movimientos = bool(amorts_p1 or amorts_p2 or dispos_mes)
 
+        # saldo_inicio_mes = capital ANTES de cualquier movimiento del mes
+        # se pasa a interes_con_movimientos para que calcule los tramos correctamente
+        saldo_inicio_mes = saldo
+
         # --- Calculo de interes en tramos ---
         if hay_movimientos:
             movimientos = (
@@ -223,7 +227,7 @@ def simulador(capital, tin, cuota_mensual, fecha_inicio,
                 [(fa, imp, "disposicion")  for fa, imp in dispos_mes]
             )
             interes, _ = interes_con_movimientos(
-                saldo, tin, fecha_anterior, fecha_recibo,
+                saldo_inicio_mes, tin, fecha_anterior, fecha_recibo,
                 movimientos, tipo_producto
             )
         else:
@@ -236,7 +240,7 @@ def simulador(capital, tin, cuota_mensual, fecha_inicio,
         interes += regularizacion_pendiente
         regularizacion_pendiente = Decimal("0")
 
-        # Aplicar P1 al saldo este mes
+        # Aplicar movimientos al saldo DESPUES del calculo de intereses
         saldo -= amort_extra_p1
         if saldo < 0:
             saldo = Decimal("0")
